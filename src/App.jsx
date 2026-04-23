@@ -1,6 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/layout/Layout';
-import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -17,16 +16,14 @@ import Notifications from './pages/Notifications';
 import Reviews from './pages/Reviews';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import Signup from './pages/Signup';
 import ContentManagement from './pages/ContentManagement';
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
 
-      <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+      <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/products" element={<Products />} />

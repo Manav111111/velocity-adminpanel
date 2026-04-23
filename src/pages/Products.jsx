@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search, Trash2, RefreshCw, Filter, SlidersHorizontal, X, Plus,
   ChevronLeft, ChevronRight, ShoppingBag, Upload, Edit2, Flame, Star, Loader2
@@ -8,6 +8,7 @@ import {
   subscribeToCollectionOrdered, subscribeToCollection,
   addDocument, updateDocument, deleteDocument
 } from '../services/firestoreService';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 const BLANK_PRODUCT = {
@@ -43,6 +44,7 @@ function CategoryBadge({ name, categories }) {
 }
 
 export default function Products() {
+  const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function Products() {
   const [newProduct, setNewProduct] = useState(BLANK_PRODUCT);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef(null);
 
   // ── Real-time subscriptions ────────────────────────────────────────────────
   useEffect(() => {
@@ -128,6 +131,98 @@ export default function Products() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Bulk CSV Import ────────────────────────────────────────────────────────
+  const handleCSVUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSaving(true);
+    toast.loading('Parsing CSV...', { id: 'csv-toast' });
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result;
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        if (lines.length < 2) throw new Error('CSV is empty or missing data rows');
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        let successCount = 0;
+
+        // Build a lookup map of existing categories (lowercase -> actual name)
+        const catLookup = {};
+        categories.forEach(c => {
+          catLookup[c.name.toLowerCase().trim()] = c.name;
+        });
+
+        const createdCats = new Set(); // track categories we auto-create in this batch
+
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
+          if (row.length !== headers.length) continue;
+
+          let payload = {
+            status: 'active',
+            image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=120&h=120&fit=crop',
+            isTrending: false,
+            isFeatured: false,
+            discount: 0,
+            stock: 0,
+            price: 0
+          };
+
+          headers.forEach((header, index) => {
+            let val = row[index];
+            if (header === 'name') payload.name = String(val);
+            if (header === 'category') {
+              const rawCat = String(val).trim();
+              const key = rawCat.toLowerCase();
+              // Match to existing category name (case-insensitive)
+              if (catLookup[key]) {
+                payload.category = catLookup[key];
+              } else {
+                // Use the CSV value as-is (proper case from CSV)
+                payload.category = rawCat;
+              }
+            }
+            if (header === 'description') payload.description = String(val);
+            if (header === 'price') payload.price = parseFloat(val) || 0;
+            if (header === 'discount') payload.discount = parseInt(val) || 0;
+            if (header === 'stock') payload.stock = parseInt(val) || 0;
+            if (header === 'publish') payload.status = String(val).toLowerCase() === 'false' ? 'draft' : 'active';
+            if (header === 'istrending') payload.isTrending = String(val).toLowerCase() === 'true';
+            if (header === 'isfeatured') payload.isFeatured = String(val).toLowerCase() === 'true';
+            if (header === 'image' && val) payload.image = String(val);
+          });
+
+          if (payload.name && payload.price > 0) {
+            // Auto-create category if it doesn't exist yet
+            if (payload.category) {
+              const catKey = payload.category.toLowerCase();
+              if (!catLookup[catKey] && !createdCats.has(catKey)) {
+                await addDocument('categories', {
+                  name: payload.category,
+                  icon: '📦',
+                  color: '#7c3aed'
+                });
+                catLookup[catKey] = payload.category;
+                createdCats.add(catKey);
+              }
+            }
+            await addDocument('products', payload);
+            successCount++;
+          }
+        }
+        toast.success(`Successfully imported ${successCount} products`, { id: 'csv-toast' });
+      } catch (err) {
+        toast.error(err.message || 'Failed to parse CSV', { id: 'csv-toast' });
+      } finally {
+        setSaving(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // ── Edit Product ───────────────────────────────────────────────────────────
@@ -286,15 +381,26 @@ export default function Products() {
           <p className="text-xs text-text-muted uppercase tracking-[0.2em] font-semibold mb-2">Catalog Management</p>
           <h1 className="text-4xl font-bold text-white">Products</h1>
         </div>
-        <div className="flex items-center bg-dark-600 rounded-lg p-0.5">
-          <button onClick={() => setActiveTab('live')}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'live' ? 'bg-purple-500 text-white' : 'text-text-muted hover:text-text-primary'}`}>
-            Live View
-          </button>
-          <button onClick={() => setActiveTab('drafts')}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'drafts' ? 'bg-purple-500 text-white' : 'text-text-muted hover:text-text-primary'}`}>
-            Drafts
-          </button>
+        <div className="flex items-center gap-3">
+          {user && (
+            <>
+              <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleCSVUpload} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={saving} className="btn-outline flex items-center gap-2 py-2">
+                {saving ? <Loader2 size={16} className="animate-spin text-purple-400" /> : <Upload size={16} />} 
+                {saving ? 'Importing...' : 'Bulk CSV Import'}
+              </button>
+            </>
+          )}
+          <div className="flex items-center bg-dark-600 rounded-lg p-0.5">
+            <button onClick={() => setActiveTab('live')}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'live' ? 'bg-purple-500 text-white' : 'text-text-muted hover:text-text-primary'}`}>
+              Live View
+            </button>
+            <button onClick={() => setActiveTab('drafts')}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'drafts' ? 'bg-purple-500 text-white' : 'text-text-muted hover:text-text-primary'}`}>
+              Drafts
+            </button>
+          </div>
         </div>
       </div>
 
@@ -303,16 +409,20 @@ export default function Products() {
         <div className="flex-1 space-y-4">
           {/* Toolbar */}
           <div className="glass-card p-4 flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
-              <input type="checkbox" className="accent-purple-500 w-4 h-4"
-                checked={selectedProducts.length === paginated.length && paginated.length > 0}
-                onChange={(e) => setSelectedProducts(e.target.checked ? paginated.map(p => p.id) : [])} />
-              Select All ({filtered.length})
-            </label>
-            {selectedProducts.length > 0 && (
-              <button onClick={bulkDelete} className="flex items-center gap-2 bg-accent-red/10 text-accent-red px-4 py-2 rounded-lg text-sm font-semibold hover:bg-accent-red/20 transition-colors">
-                <Trash2 size={14} /> Bulk Delete ({selectedProducts.length})
-              </button>
+            {user && (
+              <>
+                <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+                  <input type="checkbox" className="accent-purple-500 w-4 h-4"
+                    checked={selectedProducts.length === paginated.length && paginated.length > 0}
+                    onChange={(e) => setSelectedProducts(e.target.checked ? paginated.map(p => p.id) : [])} />
+                  Select All ({filtered.length})
+                </label>
+                {selectedProducts.length > 0 && (
+                  <button onClick={bulkDelete} className="flex items-center gap-2 bg-accent-red/10 text-accent-red px-4 py-2 rounded-lg text-sm font-semibold hover:bg-accent-red/20 transition-colors">
+                    <Trash2 size={14} /> Bulk Delete ({selectedProducts.length})
+                  </button>
+                )}
+              </>
             )}
             <div className="ml-auto flex items-center gap-2">
               <div className="relative">
@@ -331,13 +441,13 @@ export default function Products() {
             <table className="w-full">
               <thead>
                 <tr className="text-[10px] text-text-muted uppercase tracking-widest border-b border-dark-500/30">
-                  <th className="text-left p-4 font-semibold w-8"></th>
+                  {user && <th className="text-left p-4 font-semibold w-8"></th>}
                   <th className="text-left p-4 font-semibold">Product Info</th>
                   <th className="text-left p-4 font-semibold">Category</th>
                   <th className="text-left p-4 font-semibold">Price</th>
                   <th className="text-left p-4 font-semibold">Stock</th>
                   <th className="text-left p-4 font-semibold">Flags</th>
-                  <th className="text-left p-4 font-semibold w-16">Actions</th>
+                  {user && <th className="text-left p-4 font-semibold w-16">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -353,11 +463,13 @@ export default function Products() {
                 ) : (
                   paginated.map((product) => (
                     <tr key={product.id} className="border-t border-dark-500/20 hover:bg-dark-500/10 transition-colors group">
-                      <td className="p-4">
-                        <input type="checkbox" className="accent-purple-500 w-4 h-4"
-                          checked={selectedProducts.includes(product.id)}
-                          onChange={() => toggleSelect(product.id)} />
-                      </td>
+                      {user && (
+                        <td className="p-4">
+                          <input type="checkbox" className="accent-purple-500 w-4 h-4"
+                            checked={selectedProducts.includes(product.id)}
+                            onChange={() => toggleSelect(product.id)} />
+                        </td>
+                      )}
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <img src={product.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=120&h=120&fit=crop'}
@@ -405,18 +517,20 @@ export default function Products() {
                           )}
                         </div>
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                          <button onClick={() => startEdit(product)}
-                            className="text-text-muted hover:text-purple-400 transition-colors">
-                            <Edit2 size={14} />
-                          </button>
-                          <button onClick={() => handleDelete(product.id)}
-                            className="text-text-muted hover:text-accent-red transition-colors">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
+                      {user && (
+                        <td className="p-4">
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={() => startEdit(product)}
+                              className="text-text-muted hover:text-purple-400 transition-colors">
+                              <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleDelete(product.id)}
+                              className="text-text-muted hover:text-accent-red transition-colors">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -450,7 +564,7 @@ export default function Products() {
         </div>
 
         {/* Add Product Panel */}
-        {showAddPanel && (
+        {user && showAddPanel && (
           <div className="w-80 glass-card-solid p-6 slide-in-right self-start sticky top-20">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-white">Add New Product</h3>
@@ -467,7 +581,7 @@ export default function Products() {
       </div>
 
       {/* Edit Product Modal */}
-      {editProduct && (
+      {user && editProduct && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center fade-in" onClick={() => setEditProduct(null)}>
           <div className="glass-card-solid p-8 w-full max-w-md slide-up max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
@@ -497,7 +611,7 @@ export default function Products() {
       </div>
 
       {/* Floating Add Button */}
-      {!showAddPanel && !editProduct && (
+      {user && !showAddPanel && !editProduct && (
         <button onClick={() => setShowAddPanel(true)}
           className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white shadow-lg shadow-purple-500/25 hover:scale-110 transition-transform z-50">
           <ShoppingBag size={22} />

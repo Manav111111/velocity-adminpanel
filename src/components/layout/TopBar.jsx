@@ -1,6 +1,11 @@
-import { Search, HelpCircle, Moon, Store } from 'lucide-react';
+import { Search, HelpCircle, Moon, Store, Eye, LogIn } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export default function TopBar() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
   return (
     <header className="h-16 flex items-center justify-between px-6 border-b border-glass-border bg-dark-900/50 backdrop-blur-xl sticky top-0 z-40">
       {/* Search */}
@@ -15,6 +20,21 @@ export default function TopBar() {
 
       {/* Right section */}
       <div className="flex items-center gap-4">
+        {!user && (
+          <button
+            onClick={() => navigate('/login')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 transition-all text-sm font-semibold"
+          >
+            <LogIn size={16} />
+            Login to Edit
+          </button>
+        )}
+        {!user && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-500/30 border border-glass-border text-xs text-text-muted">
+            <Eye size={14} />
+            View Only
+          </div>
+        )}
         <button className="w-9 h-9 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-dark-500/30 transition-all">
           <HelpCircle size={18} />
         </button>
@@ -31,7 +51,7 @@ export default function TopBar() {
             </p>
           </div>
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-accent-blue flex items-center justify-center text-white font-bold text-xs">
-            AR
+            {user ? 'MA' : '👁️'}
           </div>
         </div>
       </div>

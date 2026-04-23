@@ -1,7 +1,7 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, FolderOpen, Users, Truck, Warehouse,
-  Tag, CreditCard, BarChart3, Bell, Star, Settings, Zap, LogOut, LayoutPanelTop
+  Tag, CreditCard, BarChart3, Bell, Star, Settings, Zap, LogOut, LayoutPanelTop, LogIn
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -37,8 +37,9 @@ const navSections = [
 ];
 
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-[220px] bg-dark-900/80 backdrop-blur-xl border-r border-glass-border flex flex-col z-50">
@@ -86,24 +87,39 @@ export default function Sidebar() {
 
       {/* User Card */}
       <div className="p-3">
-        <div className="glass-card p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-accent-blue flex items-center justify-center text-white font-bold text-xs">
-              AR
+        {user ? (
+          <div className="glass-card p-3 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-accent-blue flex items-center justify-center text-white font-bold text-xs">
+                MA
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                <p className="text-[11px] text-text-muted">{user.role}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">Alex Rivera</p>
-              <p className="text-[11px] text-text-muted">Super Admin</p>
-            </div>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 text-xs text-text-muted hover:text-accent-red transition-colors"
+            >
+              <LogOut size={14} />
+              Sign Out
+            </button>
           </div>
+        ) : (
           <button
-            onClick={logout}
-            className="flex items-center gap-2 text-xs text-text-muted hover:text-accent-red transition-colors"
+            onClick={() => navigate('/login')}
+            className="glass-card p-3 w-full flex items-center gap-3 hover:border-purple-500/30 transition-all group cursor-pointer"
           >
-            <LogOut size={14} />
-            Sign Out
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500/20 to-accent-blue/20 flex items-center justify-center text-purple-400 group-hover:text-purple-300">
+              <LogIn size={16} />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-semibold text-text-secondary group-hover:text-white transition-colors">Login to Edit</p>
+              <p className="text-[11px] text-text-muted">View-only mode</p>
+            </div>
           </button>
-        </div>
+        )}
       </div>
     </aside>
   );

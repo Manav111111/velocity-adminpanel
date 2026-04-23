@@ -4,6 +4,7 @@ import {
   subscribeToCollection, subscribeToCollectionOrdered,
   addDocument, updateDocument, deleteDocument
 } from '../services/firestoreService';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 const colorOptions = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444', '#8b5cf6'];
@@ -20,6 +21,7 @@ function SkeletonCard() {
 }
 
 export default function Categories() {
+  const { user } = useAuth();
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +32,8 @@ export default function Categories() {
 
   // ── Real-time subscriptions ────────────────────────────────────────────────
   useEffect(() => {
-    const unsubCats = subscribeToCollectionOrdered('categories', 'createdAt', 'asc', (data) => {
+    // Use unordered subscription so categories without createdAt field are still returned
+    const unsubCats = subscribeToCollection('categories', (data) => {
       setCategories(data);
       setLoading(false);
     });
@@ -40,11 +43,14 @@ export default function Categories() {
     return () => { unsubCats(); unsubProducts(); };
   }, []);
 
-  // ── Compute product count per category dynamically ─────────────────────────
+  // ── Compute product count per category dynamically (case-insensitive) ───────
   const productCountMap = useMemo(() => {
     const map = {};
     products.forEach(p => {
-      if (p.category) map[p.category] = (map[p.category] || 0) + 1;
+      if (p.category) {
+        const key = p.category.toLowerCase().trim();
+        map[key] = (map[key] || 0) + 1;
+      }
     });
     return map;
   }, [products]);
@@ -99,9 +105,11 @@ export default function Categories() {
           <h1 className="text-4xl font-bold text-white">Categories</h1>
           <p className="text-text-secondary mt-1">Organize your product catalog into meaningful groups.</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
-          <Plus size={18} /> Add Category
-        </button>
+        {user && (
+          <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
+            <Plus size={18} /> Add Category
+          </button>
+        )}
       </div>
 
       {/* Category Grid */}
@@ -117,7 +125,7 @@ export default function Categories() {
       ) : (
         <div className="grid grid-cols-3 gap-4">
           {categories.map((cat, i) => {
-            const count = productCountMap[cat.name] || 0;
+            const count = productCountMap[cat.name.toLowerCase().trim()] || 0;
             const maxCount = Math.max(...Object.values(productCountMap), 1);
             return (
               <div key={cat.id} className="glass-card p-6 group hover:border-purple-500/30 transition-all slide-up"
@@ -127,16 +135,18 @@ export default function Categories() {
                     style={{ backgroundColor: cat.color + '20' }}>
                     {cat.icon}
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleEdit(cat)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-purple-400 hover:bg-purple-500/10 transition-colors">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(cat.id, cat.name)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {user && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleEdit(cat)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-purple-400 hover:bg-purple-500/10 transition-colors">
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => handleDelete(cat.id, cat.name)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-1">{cat.name}</h3>
                 <div className="flex items-center gap-2 text-text-secondary">
@@ -154,7 +164,7 @@ export default function Categories() {
       )}
 
       {/* Add/Edit Modal */}
-      {showForm && (
+      {user && showForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center fade-in" onClick={resetForm}>
           <div className="glass-card-solid p-8 w-full max-w-md slide-up" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">

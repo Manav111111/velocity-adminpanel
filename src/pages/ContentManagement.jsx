@@ -8,6 +8,7 @@ import {
   addDocument, updateDocument, deleteDocument
 } from '../services/firestoreService';
 import { uploadToCloudinary } from '../services/cloudinary';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 // ── Banner Skeleton ───────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ function Toggle({ checked, onChange, color = 'bg-purple-500' }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 1 – Banner Management
 // ══════════════════════════════════════════════════════════════════════════════
-function BannerManagement() {
+function BannerManagement({ user }) {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -132,9 +133,11 @@ function BannerManagement() {
           <h2 className="text-2xl font-bold text-white">Banner Management</h2>
           <p className="text-text-secondary text-sm mt-1">Control home screen banners visible to app users.</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary">
-          <Plus size={18} /> Add Banner
-        </button>
+        {user && (
+          <button onClick={() => setShowForm(true)} className="btn-primary">
+            <Plus size={18} /> Add Banner
+          </button>
+        )}
       </div>
 
       {/* Banner Grid */}
@@ -176,16 +179,24 @@ function BannerManagement() {
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-dark-500/30">
                   <div className="flex items-center gap-2 text-xs text-text-secondary">
                     {banner.isActive ? <Eye size={12} /> : <EyeOff size={12} />}
-                    <Toggle
-                      checked={banner.isActive}
-                      onChange={() => handleToggleActive(banner.id, banner.isActive)}
-                      color="bg-accent-green"
-                    />
+                    {user ? (
+                      <Toggle
+                        checked={banner.isActive}
+                        onChange={() => handleToggleActive(banner.id, banner.isActive)}
+                        color="bg-accent-green"
+                      />
+                    ) : (
+                      <span className={`text-xs font-semibold ${banner.isActive ? 'text-accent-green' : 'text-text-muted'}`}>
+                        {banner.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    )}
                   </div>
-                  <button onClick={() => handleDelete(banner.id)}
-                    className="text-text-muted hover:text-accent-red transition-colors">
-                    <Trash2 size={14} />
-                  </button>
+                  {user && (
+                    <button onClick={() => handleDelete(banner.id)}
+                      className="text-text-muted hover:text-accent-red transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -194,7 +205,7 @@ function BannerManagement() {
       )}
 
       {/* Add Banner Modal */}
-      {showForm && (
+      {user && showForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center fade-in"
           onClick={() => setShowForm(false)}>
           <div className="glass-card-solid p-8 w-full max-w-lg slide-up" onClick={e => e.stopPropagation()}>
@@ -257,7 +268,7 @@ function BannerManagement() {
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 2 – Home Configuration
 // ══════════════════════════════════════════════════════════════════════════════
-function HomeConfiguration() {
+function HomeConfiguration({ user }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState({}); // { [productId]: 'trending'|'featured'|null }
@@ -360,27 +371,39 @@ function HomeConfiguration() {
 
               {/* Trending Toggle */}
               <div className="w-28 flex items-center justify-center">
-                {updating[product.id] === 'isTrending' ? (
-                  <Loader2 size={18} className="animate-spin text-text-muted" />
+                {user ? (
+                  updating[product.id] === 'isTrending' ? (
+                    <Loader2 size={18} className="animate-spin text-text-muted" />
+                  ) : (
+                    <Toggle
+                      checked={product.isTrending || false}
+                      onChange={() => handleToggle(product, 'isTrending')}
+                      color="bg-orange-500"
+                    />
+                  )
                 ) : (
-                  <Toggle
-                    checked={product.isTrending || false}
-                    onChange={() => handleToggle(product, 'isTrending')}
-                    color="bg-orange-500"
-                  />
+                  <span className={`text-xs font-semibold ${product.isTrending ? 'text-orange-400' : 'text-text-muted'}`}>
+                    {product.isTrending ? 'Yes' : 'No'}
+                  </span>
                 )}
               </div>
 
               {/* Featured Toggle */}
               <div className="w-28 flex items-center justify-center">
-                {updating[product.id] === 'isFeatured' ? (
-                  <Loader2 size={18} className="animate-spin text-text-muted" />
+                {user ? (
+                  updating[product.id] === 'isFeatured' ? (
+                    <Loader2 size={18} className="animate-spin text-text-muted" />
+                  ) : (
+                    <Toggle
+                      checked={product.isFeatured || false}
+                      onChange={() => handleToggle(product, 'isFeatured')}
+                      color="bg-yellow-500"
+                    />
+                  )
                 ) : (
-                  <Toggle
-                    checked={product.isFeatured || false}
-                    onChange={() => handleToggle(product, 'isFeatured')}
-                    color="bg-yellow-500"
-                  />
+                  <span className={`text-xs font-semibold ${product.isFeatured ? 'text-yellow-400' : 'text-text-muted'}`}>
+                    {product.isFeatured ? 'Yes' : 'No'}
+                  </span>
                 )}
               </div>
             </div>
@@ -395,6 +418,7 @@ function HomeConfiguration() {
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 export default function ContentManagement() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('banners');
 
   return (
@@ -423,7 +447,7 @@ export default function ContentManagement() {
 
       {/* Tab Content */}
       <div className="slide-up">
-        {activeTab === 'banners' ? <BannerManagement /> : <HomeConfiguration />}
+        {activeTab === 'banners' ? <BannerManagement user={user} /> : <HomeConfiguration user={user} />}
       </div>
     </div>
   );

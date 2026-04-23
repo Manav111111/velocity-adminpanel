@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Zap, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -9,15 +9,21 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  // If already logged in, redirect to home
+  if (user) {
+    navigate('/');
+    return null;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await login(email, password);
-      toast.success('Welcome back!');
+      toast.success('Welcome back, Admin!');
       navigate('/');
     } catch (err) {
       toast.error(err.message || 'Login failed');
@@ -46,8 +52,8 @@ export default function Login() {
           </div>
         </div>
 
-        <h2 className="text-xl font-semibold text-white mb-1 text-center">Welcome Back</h2>
-        <p className="text-text-secondary text-sm mb-6 text-center">Sign in to your admin account</p>
+        <h2 className="text-xl font-semibold text-white mb-1 text-center">Admin Login</h2>
+        <p className="text-text-secondary text-sm mb-6 text-center">Sign in to edit and manage content</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -100,11 +106,8 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-text-secondary text-sm text-center mt-6">
-          Don't have an account?{' '}
-          <Link to="/signup" className="text-purple-400 hover:text-purple-300 font-semibold">
-            Sign Up
-          </Link>
+        <p className="text-text-muted text-xs text-center mt-6 opacity-60">
+          Only authorized admins can edit content
         </p>
       </div>
     </div>

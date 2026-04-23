@@ -1,45 +1,197 @@
-import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { TrendingUp, TrendingDown, Activity, ShoppingCart, DollarSign, Users, Clock, FileText, Radio, AlertTriangle, ArrowUpRight, Plus } from 'lucide-react';
-import { dashboardStats, revenueData, topMovers, recentOrders, criticalAlerts } from '../data/mockData';
+import { useState, useEffect } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts';
+import {
+  ShoppingCart, DollarSign, Users,
+  Package, FileText, Plus, Loader2,
+  RefreshCw, ShoppingBag,
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { subscribeToOrders, subscribeToDashboardStats, formatOrderDate } from '../services/ordersService';
 
-const statCards = [
-  { label: 'TOTAL ORDERS', value: '12,482', trend: '+14%', up: true, icon: ShoppingCart },
-  { label: 'REVENUE (USD)', value: '$284.5K', trend: '+22%', up: true, icon: DollarSign },
-  { label: 'ACTIVE USERS', value: '3,204', trend: 'Stable →', up: null, icon: Users },
-  { label: 'PENDING ORDERS', value: '142', trend: 'High ▲', up: false, icon: Clock },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const STATUS_BADGE = {
+  pending: 'badge-pending',
+  confirmed: 'badge-packed',
+  'out for delivery': 'bg-accent-blue/15 text-accent-blue',
+  delivered: 'badge-delivered',
+  cancelled: 'badge-cancelled',
+};
+
+const STATUS_LABELS = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  'out for delivery': 'Out for Delivery',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+};
+
+const getBadgeClass = (status = '') =>
+  STATUS_BADGE[(status || '').toLowerCase().trim()] || 'badge-pending';
+
+const getLabel = (status = '') =>
+  STATUS_LABELS[(status || '').toLowerCase().trim()] || status;
+
+/**
+ * Build a revenue-by-day chart from orders array.
+ * Shows last 7 days' total revenue.
+ */
+function buildRevenueChart(orders) {
+  const days = {};
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // Initialise last 7 days
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toDateString();
+    days[key] = { name: dayNames[d.getDay()], value: 0 };
+  }
+
+  orders.forEach((o) => {
+    const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
+    const key = d.toDateString();
+    if (days[key] !== undefined) {
+      days[key].value += Number(o.totalAmount || 0);
+    }
+  });
+
+  return Object.values(days);
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 const CustomTooltip = ({ active, payload }) => {
-  if (active && payload && payload.length) {
+  if (active && payload?.length) {
     return (
       <div className="glass-card-solid px-3 py-2 text-xs">
-        <p className="text-white font-semibold">${payload[0].value.toLocaleString()}</p>
+        <p className="text-white font-semibold">₹{payload[0].value.toLocaleString()}</p>
       </div>
     );
   }
   return null;
 };
 
+function StatCard({ label, value, icon: Icon, accent, loading, sub }) {
+  return (
+    <div className="glass-card p-5 slide-up">
+      <div className="flex items-start justify-between mb-3">
+        <p className="text-[10px] text-text-muted uppercase tracking-widest">{label}</p>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${accent.bg}`}>
+          <Icon size={16} className={accent.icon} />
+        </div>
+      </div>
+      {loading ? (
+        <div className="h-9 bg-dark-500/40 rounded-lg animate-pulse w-28" />
+      ) : (
+        <p className="text-3xl font-bold text-white">{value}</p>
+      )}
+      {sub && <p className="text-xs text-text-muted mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+function SkeletonRow() {
+  return (
+    <tr className="border-t border-dark-500/30">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <td key={i} className="py-3.5">
+          <div className="h-4 bg-dark-500/40 rounded-lg animate-pulse" />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
-  const [chartPeriod, setChartPeriod] = useState('Daily');
+  const { user } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [allOrders, setAllOrders] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [lastRefreshed, setLastRefreshed] = useState(new Date());
+
+  // ── Real-time stats ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const unsub = subscribeToDashboardStats((data) => {
+      setStats(data);
+      setStatsLoading(false);
+      setLastRefreshed(new Date());
+    });
+    return () => unsub();
+  }, []);
+
+  // ── Recent orders & all orders for charts ───────────────────────────────────
+  useEffect(() => {
+    const unsub = subscribeToOrders((data) => {
+      setAllOrders(data);
+      setRecentOrders(data.slice(0, 8)); // top 8 for dashboard table
+      setOrdersLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const chartData = buildRevenueChart(allOrders);
+
+  const statCards = [
+    {
+      label: 'Total Orders',
+      value: stats ? stats.totalOrders.toLocaleString() : '—',
+      icon: ShoppingCart,
+      accent: { bg: 'bg-purple-500/15', icon: 'text-purple-400' },
+      sub: stats?.pendingOrders > 0 ? `${stats.pendingOrders} pending` : null,
+    },
+    {
+      label: 'Total Revenue',
+      value: stats ? `₹${stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 0 })}` : '—',
+      icon: DollarSign,
+      accent: { bg: 'bg-accent-green/15', icon: 'text-accent-green' },
+      sub: 'Sum of all order amounts',
+    },
+    {
+      label: 'Total Products',
+      value: stats ? stats.totalProducts.toLocaleString() : '—',
+      icon: Package,
+      accent: { bg: 'bg-accent-blue/15', icon: 'text-accent-blue' },
+      sub: 'Live count from Firestore',
+    },
+    {
+      label: 'Registered Users',
+      value: stats ? stats.totalUsers.toLocaleString() : '—',
+      icon: Users,
+      accent: { bg: 'bg-accent-pink/15', icon: 'text-accent-pink' },
+      sub: 'All-time user count',
+    },
+  ];
 
   return (
     <div className="space-y-6 fade-in">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-text-muted uppercase tracking-[0.2em] font-semibold mb-2">System Performance</p>
-          <h1 className="text-4xl font-bold text-white leading-tight">Operational<br />Intelligence.</h1>
+          <p className="text-xs text-text-muted uppercase tracking-[0.2em] font-semibold mb-2">
+            Live System Dashboard
+          </p>
+          <h1 className="text-4xl font-bold text-white leading-tight">
+            Operational<br />Intelligence.
+          </h1>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 glass-card px-3 py-2 text-xs text-text-muted">
+            <span className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
+            <span className="text-accent-green font-semibold">Live</span>
+            <span className="text-text-muted">
+              Updated {lastRefreshed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
           <button className="btn-outline text-sm">
             <FileText size={16} />
-            Export Report
-          </button>
-          <button className="btn-outline text-sm">
-            <Radio size={16} />
-            Live Monitor
+            Export
           </button>
         </div>
       </div>
@@ -47,48 +199,33 @@ export default function Dashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
         {statCards.map((card, i) => (
-          <div key={i} className="glass-card p-5 slide-up" style={{ animationDelay: `${i * 80}ms` }}>
-            <p className="text-[10px] text-text-muted uppercase tracking-widest mb-3">{card.label}</p>
-            <div className="flex items-end justify-between">
-              <p className="text-3xl font-bold text-white">{card.value}</p>
-              <span className={`text-xs font-semibold px-2 py-1 rounded-lg flex items-center gap-1
-                ${card.up === true ? 'text-accent-green bg-accent-green/10' : ''}
-                ${card.up === false ? 'text-accent-red bg-accent-red/10' : ''}
-                ${card.up === null ? 'text-text-secondary bg-dark-400/30' : ''}
-              `}>
-                {card.up === true && <TrendingUp size={12} />}
-                {card.up === false && <TrendingDown size={12} />}
-                {card.trend}
-              </span>
-            </div>
-          </div>
+          <StatCard key={i} {...card} loading={statsLoading} />
         ))}
       </div>
 
-      {/* Chart + Top Movers Row */}
+      {/* Chart + Pending Summary Row */}
       <div className="grid grid-cols-3 gap-4">
-        {/* Revenue Chart */}
+        {/* Revenue Over Last 7 Days */}
         <div className="col-span-2 glass-card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-white">Revenue Velocity</h3>
-              <p className="text-sm text-text-secondary">Real-time performance across delivery nodes</p>
+              <h3 className="text-lg font-semibold text-white">Revenue (Last 7 Days)</h3>
+              <p className="text-sm text-text-secondary">
+                Aggregated from live Firestore orders
+              </p>
             </div>
-            <div className="flex items-center bg-dark-600 rounded-lg p-0.5">
-              {['Daily', 'Weekly'].map(p => (
-                <button key={p} onClick={() => setChartPeriod(p)}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all
-                    ${chartPeriod === p ? 'bg-purple-500 text-white' : 'text-text-muted hover:text-text-primary'}`}>
-                  {p}
-                </button>
-              ))}
-            </div>
+            {ordersLoading && <Loader2 size={16} className="text-purple-400 animate-spin" />}
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={revenueData} barCategoryGap="20%">
+            <BarChart data={chartData} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" vertical={false} />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#64748b', fontSize: 11 }}
+                tickFormatter={(v) => v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`}
+              />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(124,58,237,0.08)' }} />
               <Bar dataKey="value" fill="url(#barGradient)" radius={[6, 6, 0, 0]} maxBarSize={32} />
               <defs>
@@ -101,119 +238,147 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Top Movers */}
+        {/* Order Status Breakdown */}
         <div className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Top Movers</h3>
-            <button className="text-xs text-purple-400 hover:text-purple-300 font-semibold">View All</button>
+            <h3 className="text-lg font-semibold text-white">Order Status</h3>
+            <div className="flex items-center gap-1.5 text-xs text-text-muted">
+              <RefreshCw size={12} />
+              Real-time
+            </div>
           </div>
-          <div className="space-y-4">
-            {topMovers.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 group">
-                <img src={item.image} alt={item.name} className="w-11 h-11 rounded-xl object-cover" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{item.name}</p>
-                  <p className="text-xs text-text-muted">{item.sold}</p>
-                </div>
-                <p className="text-sm font-bold text-white">${item.price.toFixed(2)}</p>
+          {statsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-12 bg-dark-500/40 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { key: 'pending', label: 'Pending', color: 'bg-accent-amber', textColor: 'text-accent-amber' },
+                { key: 'confirmed', label: 'Confirmed', color: 'bg-purple-500', textColor: 'text-purple-400' },
+                { key: 'out for delivery', label: 'Out for Delivery', color: 'bg-accent-blue', textColor: 'text-accent-blue' },
+                { key: 'delivered', label: 'Delivered', color: 'bg-accent-green', textColor: 'text-accent-green' },
+                { key: 'cancelled', label: 'Cancelled', color: 'bg-accent-red', textColor: 'text-accent-red' },
+              ].map(({ key, label, color, textColor }) => {
+                const count = allOrders.filter((o) => (o.status || '').toLowerCase().trim() === key).length;
+                const pct = stats?.totalOrders > 0 ? Math.round((count / stats.totalOrders) * 100) : 0;
+                return (
+                  <div key={key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-text-secondary">{label}</span>
+                      <span className={`text-xs font-bold ${textColor}`}>{count}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-dark-500 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${color} rounded-full transition-all duration-700`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Total Revenue Callout */}
+          {!statsLoading && (
+            <div className="mt-6 pt-4 border-t border-glass-border">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-text-secondary">Total Revenue</p>
+                <p className="text-sm font-bold text-accent-green">
+                  ₹{(stats?.totalRevenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                </p>
               </div>
-            ))}
-          </div>
-          {/* Inventory Health */}
-          <div className="mt-6 pt-4 border-t border-glass-border">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-text-secondary">Inventory Health</p>
-              <p className="text-sm font-bold text-accent-green">92%</p>
+              <div className="w-full h-2 bg-dark-500 rounded-full overflow-hidden mt-2">
+                <div className="h-full bg-gradient-to-r from-accent-green to-accent-cyan rounded-full w-full" />
+              </div>
             </div>
-            <div className="w-full h-2 bg-dark-500 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-accent-green to-accent-cyan rounded-full" style={{ width: '92%' }} />
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Recent Orders + Alerts Row */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Recent Orders */}
-        <div className="col-span-2 glass-card p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-lg font-semibold text-white">Recent Transactional Flux</h3>
-            <button className="btn-outline text-xs py-1.5 px-3">
-              All Channels ▾
-            </button>
+      {/* Recent Orders Table */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Recent Orders</h3>
+            <p className="text-sm text-text-secondary">Last 8 orders — live from Firestore</p>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="text-[10px] text-text-muted uppercase tracking-widest">
-                <th className="text-left pb-3 font-semibold">Order ID</th>
-                <th className="text-left pb-3 font-semibold">Customer</th>
-                <th className="text-left pb-3 font-semibold">Amount</th>
-                <th className="text-left pb-3 font-semibold">Timestamp</th>
-                <th className="text-left pb-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order) => (
-                <tr key={order.id} className="border-t border-dark-500/30 hover:bg-dark-500/10 transition-colors">
-                  <td className="py-3.5 text-sm font-semibold text-white">{order.id}</td>
-                  <td className="py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-accent-blue flex items-center justify-center text-[10px] font-bold text-white">
-                        {order.avatar}
-                      </div>
-                      <span className="text-sm text-white">{order.customer}</span>
+          {ordersLoading && <Loader2 size={16} className="text-purple-400 animate-spin" />}
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="text-[10px] text-text-muted uppercase tracking-widest">
+              <th className="text-left pb-3 font-semibold">Order ID</th>
+              <th className="text-left pb-3 font-semibold">Receiver</th>
+              <th className="text-left pb-3 font-semibold">Items</th>
+              <th className="text-left pb-3 font-semibold">Amount</th>
+              <th className="text-left pb-3 font-semibold">Timestamp</th>
+              <th className="text-left pb-3 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ordersLoading
+              ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+              : recentOrders.length === 0
+              ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <ShoppingBag size={36} className="text-text-muted opacity-30" />
+                      <p className="text-sm text-text-muted">
+                        No orders yet. New orders from your app will appear here in real-time.
+                      </p>
                     </div>
                   </td>
-                  <td className="py-3.5 text-sm font-semibold text-white">${order.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                  <td className="py-3.5 text-sm text-text-secondary">{order.date}</td>
+                </tr>
+              )
+              : recentOrders.map((order) => (
+                <tr key={order.id} className="border-t border-dark-500/30 hover:bg-dark-500/10 transition-colors">
+                  <td className="py-3.5 text-sm font-mono font-semibold text-white">
+                    {order.id.slice(0, 10)}…
+                  </td>
                   <td className="py-3.5">
-                    <span className={`status-badge ${
-                      order.status === 'Delivered' ? 'badge-delivered' :
-                      order.status === 'Packed' ? 'badge-packed' :
-                      'badge-pending'
-                    }`}>
-                      {order.status}
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-accent-blue flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                        {(order.receiverName || order.userId || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm text-white">{order.receiverName || '—'}</p>
+                        {order.receiverPhone && (
+                          <p className="text-xs text-text-muted">{order.receiverPhone}</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3.5 text-sm text-text-secondary">
+                    {(order.items || []).length} item{(order.items || []).length !== 1 ? 's' : ''}
+                  </td>
+                  <td className="py-3.5 text-sm font-semibold text-white">
+                    ₹{Number(order.totalAmount || 0).toFixed(2)}
+                  </td>
+                  <td className="py-3.5 text-xs text-text-secondary whitespace-nowrap">
+                    {formatOrderDate(order.createdAt)}
+                  </td>
+                  <td className="py-3.5">
+                    <span className={`status-badge ${getBadgeClass(order.status)}`}>
+                      {getLabel(order.status)}
                     </span>
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Critical Alerts */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <span className="w-2 h-2 bg-accent-red rounded-full animate-pulse" />
-            Critical Alerts
-          </h3>
-          <div className="space-y-3">
-            {criticalAlerts.map((alert) => (
-              <div key={alert.id} className={`p-4 rounded-xl border transition-all hover:scale-[1.01] ${
-                alert.type === 'stock' ? 'bg-accent-red/5 border-accent-red/20' :
-                alert.type === 'delivery' ? 'bg-accent-amber/5 border-accent-amber/20' :
-                'bg-accent-blue/5 border-accent-blue/20'
-              }`}>
-                <p className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-                  {alert.type === 'stock' && <AlertTriangle size={14} className="text-accent-red" />}
-                  {alert.title}
-                </p>
-                <p className="text-xs text-text-secondary leading-relaxed">{alert.desc}</p>
-                {alert.action && (
-                  <button className="mt-2 text-xs font-bold text-accent-red bg-accent-red/10 px-3 py-1 rounded-lg hover:bg-accent-red/20 transition-colors">
-                    {alert.action}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+          </tbody>
+        </table>
       </div>
 
       {/* FAB */}
-      <button className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white shadow-lg shadow-purple-500/25 hover:scale-110 transition-transform z-50">
-        <Plus size={24} />
-      </button>
+      {user && (
+        <button className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white shadow-lg shadow-purple-500/25 hover:scale-110 transition-transform z-50">
+          <Plus size={24} />
+        </button>
+      )}
     </div>
   );
 }

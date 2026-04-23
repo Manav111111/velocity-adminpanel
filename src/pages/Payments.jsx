@@ -1,12 +1,59 @@
-import { CreditCard, ArrowUpRight, ArrowDownRight, Download, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { CreditCard, ArrowUpRight, ArrowDownRight, Download, Filter, Loader2 } from 'lucide-react';
+import { subscribeToOrders, formatOrderDate, normalise } from '../services/ordersService';
 
 export default function Payments() {
-  const transactions = [
-    { id: 'TXN-90214', date: 'Oct 24, 14:22', type: 'Credit', amount: 244.50, status: 'Completed', method: 'Stripe •••• 4242' },
-    { id: 'TXN-90215', date: 'Oct 24, 15:05', type: 'Credit', amount: 1029.00, status: 'Completed', method: 'PayPal' },
-    { id: 'TXN-90216', date: 'Oct 24, 16:30', type: 'Refund', amount: 45.00, status: 'Processed', method: 'Stripe •••• 1111' },
-    { id: 'TXN-90217', date: 'Oct 24, 18:10', type: 'Credit', amount: 89.10, status: 'Pending', method: 'Apple Pay' },
-  ];
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = subscribeToOrders((data) => {
+      setOrders(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const stats = useMemo(() => {
+    let volume = 0;
+    let refunds = 0;
+    let pending = 0;
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    orders.forEach(o => {
+      const amount = Number(o.totalAmount || 0);
+      const status = normalise(o.status);
+      const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
+
+      if (d >= thirtyDaysAgo) {
+        if (status === 'delivered') volume += amount;
+        if (status === 'cancelled') refunds += amount;
+      }
+      if (['pending', 'confirmed', 'out for delivery'].includes(status)) {
+        pending += amount;
+      }
+    });
+
+    return { volume, refunds, pending };
+  }, [orders]);
+
+  const transactions = useMemo(() => {
+    return orders.slice(0, 15).map(o => {
+      const status = normalise(o.status);
+      return {
+        id: o.id,
+        date: formatOrderDate(o.createdAt),
+        type: status === 'cancelled' ? 'Refund' : 'Credit',
+        amount: o.totalAmount || 0,
+        status: status === 'delivered' ? 'Completed' : 
+                status === 'cancelled' ? 'Processed' : 'Pending',
+        method: o.paymentMethod || 'COD / App'
+      };
+    });
+  }, [orders]);
 
   return (
     <div className="space-y-6 fade-in">
@@ -24,18 +71,24 @@ export default function Payments() {
       <div className="grid grid-cols-3 gap-4">
         <div className="glass-card p-6">
           <p className="text-xs text-text-muted uppercase tracking-widest mb-2">Total Volume (30d)</p>
-          <p className="text-3xl font-bold text-white mb-2">$142,890</p>
-          <p className="text-xs text-accent-green flex items-center gap-1"><ArrowUpRight size={12} /> +12.5% vs last month</p>
+          <div className="flex items-center gap-2 mb-2">
+            {loading ? <Loader2 size={24} className="animate-spin text-purple-400" /> : <p className="text-3xl font-bold text-white">₹{stats.volume.toLocaleString()}</p>}
+          </div>
+          <p className="text-xs text-accent-green flex items-center gap-1"><ArrowUpRight size={12} /> Real-time</p>
         </div>
         <div className="glass-card p-6">
           <p className="text-xs text-text-muted uppercase tracking-widest mb-2">Refunds (30d)</p>
-          <p className="text-3xl font-bold text-white mb-2">$2,450</p>
-          <p className="text-xs text-accent-red flex items-center gap-1"><ArrowDownRight size={12} /> +2.1% vs last month</p>
+          <div className="flex items-center gap-2 mb-2">
+            {loading ? <Loader2 size={24} className="animate-spin text-purple-400" /> : <p className="text-3xl font-bold text-white">₹{stats.refunds.toLocaleString()}</p>}
+          </div>
+          <p className="text-xs text-text-secondary flex items-center gap-1"><ArrowDownRight size={12} /> Cancelled Orders</p>
         </div>
         <div className="glass-card p-6">
           <p className="text-xs text-text-muted uppercase tracking-widest mb-2">Pending Escrow</p>
-          <p className="text-3xl font-bold text-white mb-2">$8,420</p>
-          <p className="text-xs text-text-secondary">Clearing in 24-48 hrs</p>
+          <div className="flex items-center gap-2 mb-2">
+             {loading ? <Loader2 size={24} className="animate-spin text-purple-400" /> : <p className="text-3xl font-bold text-white">₹{stats.pending.toLocaleString()}</p>}
+          </div>
+          <p className="text-xs text-text-secondary">Expected from ongoing deliveries</p>
         </div>
       </div>
 
@@ -54,9 +107,13 @@ export default function Payments() {
             </tr>
           </thead>
           <tbody>
-            {transactions.map((t, i) => (
-              <tr key={i} className="border-t border-dark-500/20 hover:bg-dark-500/10">
-                <td className="p-4 text-sm font-semibold text-white">{t.id}</td>
+            {loading ? (
+              <tr><td colSpan="5" className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-purple-400" /></td></tr>
+            ) : transactions.length === 0 ? (
+              <tr><td colSpan="5" className="p-8 text-center text-text-muted">No transactions found</td></tr>
+            ) : transactions.map((t, i) => (
+              <tr key={t.id} className="border-t border-dark-500/20 hover:bg-dark-500/10">
+                <td className="p-4 text-sm font-semibold text-white font-mono">{t.id.slice(0,8)}...</td>
                 <td className="p-4 text-sm text-text-secondary">{t.date}</td>
                 <td className="p-4">
                   <div className="flex items-center gap-2">
@@ -68,7 +125,7 @@ export default function Payments() {
                   <span className={`status-badge ${t.status === 'Completed' || t.status === 'Processed' ? 'badge-delivered' : 'badge-pending'}`}>{t.status}</span>
                 </td>
                 <td className={`p-4 text-sm font-bold text-right ${t.type === 'Refund' ? 'text-accent-red' : 'text-white'}`}>
-                  {t.type === 'Refund' ? '-' : '+'}${t.amount.toFixed(2)}
+                  {t.type === 'Refund' ? '-' : '+'}₹{t.amount.toLocaleString()}
                 </td>
               </tr>
             ))}

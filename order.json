@@ -1,0 +1,34 @@
+{
+  "status": "confirmed",
+  "userName": "Manav",
+  "paymentMethod": "COD",
+  "itemCount": 1,
+  "instructions": "",
+  "deliveryFee": 12.5,
+  "products": [
+    {
+      "image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=120&h=120&fit=crop",
+      "qty": 1,
+      "category": "bevarages",
+      "id": "jpdqZybLq2OhmffSnCZS",
+      "name": "sting",
+      "price": 38
+    }
+  ],
+  "userId": "0ZZAOua7xsfniHKZ5vqL0nLS3gH3",
+  "createdAt": "2026-03-30T04:01:11.296Z",
+  "addressDetails": {
+    "city": "New Delhi",
+    "region": "Delhi",
+    "short": "B56, New Delhi",
+    "lng": 77.0605838,
+    "postalCode": "110086",
+    "text": "B56, Prem Nagar, New Delhi, Delhi, 110086",
+    "lat": 28.691953
+  },
+  "address": "B56, New Delhi",
+  "userEmail": "manavgupta236@gmail.com",
+  "tax": 2.9,
+  "subtotal": 38,
+  "total": 53.4
+}

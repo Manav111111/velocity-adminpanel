@@ -1,24 +1,54 @@
-import { useState } from 'react';
-import { Plus, Edit2, Trash2, X, Tag, Calendar, Percent, DollarSign, Copy } from 'lucide-react';
-import { mockCoupons } from '../data/mockData';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, X, Tag, Calendar, Percent, DollarSign, Copy, Loader2 } from 'lucide-react';
+import { subscribeToCollection, addDocument, updateDocument, deleteDocument } from '../services/firestoreService';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function Offers() {
-  const [coupons, setCoupons] = useState(mockCoupons);
+  const { user } = useAuth();
+  const [coupons, setCoupons] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ code: '', discount: '', type: 'percentage', minOrder: '', maxDiscount: '', validUntil: '' });
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  useEffect(() => {
+    const unsub = subscribeToCollection('coupons', (data) => {
+      setCoupons(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSave = async () => {
     if (!form.code || !form.discount) return toast.error('Code and discount required');
-    if (editingId) {
-      setCoupons(prev => prev.map(c => c.id === editingId ? { ...c, ...form, discount: Number(form.discount), minOrder: Number(form.minOrder), maxDiscount: Number(form.maxDiscount) } : c));
-      toast.success('Coupon updated');
-    } else {
-      setCoupons(prev => [...prev, { id: String(Date.now()), ...form, discount: Number(form.discount), minOrder: Number(form.minOrder), maxDiscount: Number(form.maxDiscount), usageCount: 0, status: 'active' }]);
-      toast.success('Coupon created');
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        discount: Number(form.discount),
+        minOrder: Number(form.minOrder) || 0,
+        maxDiscount: Number(form.maxDiscount) || 0,
+      };
+
+      if (editingId) {
+        await updateDocument('coupons', editingId, payload);
+        toast.success('Coupon updated');
+      } else {
+        await addDocument('coupons', {
+          ...payload,
+          usageCount: 0,
+          status: 'active'
+        });
+        toast.success('Coupon created');
+      }
+      resetForm();
+    } catch (err) {
+      toast.error('Operation failed');
+    } finally {
+      setSaving(false);
     }
-    resetForm();
   };
 
   const handleEdit = (c) => {
@@ -27,7 +57,15 @@ export default function Offers() {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => { setCoupons(prev => prev.filter(c => c.id !== id)); toast.success('Coupon deleted'); };
+  const handleDelete = async (id) => { 
+     try {
+        await deleteDocument('coupons', id);
+        toast.success('Coupon deleted');
+     } catch (err) {
+        toast.error('Delete failed');
+     }
+  };
+  
   const resetForm = () => { setForm({ code: '', discount: '', type: 'percentage', minOrder: '', maxDiscount: '', validUntil: '' }); setEditingId(null); setShowForm(false); };
   const copyCode = (code) => { navigator.clipboard.writeText(code); toast.success(`Copied: ${code}`); };
 
@@ -39,9 +77,11 @@ export default function Offers() {
           <h1 className="text-4xl font-bold text-white">Offers & Coupons</h1>
           <p className="text-text-secondary mt-1">Create and manage promotional offers to drive customer engagement.</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
-          <Plus size={18} /> Create Coupon
-        </button>
+        {user && (
+          <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
+            <Plus size={18} /> Create Coupon
+          </button>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -72,11 +112,15 @@ export default function Offers() {
               <th className="text-left p-4 font-semibold">Valid Until</th>
               <th className="text-left p-4 font-semibold">Used</th>
               <th className="text-left p-4 font-semibold">Status</th>
-              <th className="text-left p-4 font-semibold">Actions</th>
+              {user && <th className="text-left p-4 font-semibold">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {coupons.map(coupon => (
+            {loading ? (
+              <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="mx-auto text-purple-400 animate-spin" /></td></tr>
+            ) : coupons.length === 0 ? (
+              <tr><td colSpan="8" className="p-8 text-center text-text-muted">No coupons found. Create your first offer!</td></tr>
+            ) : coupons.map(coupon => (
               <tr key={coupon.id} className="border-t border-dark-500/20 hover:bg-dark-500/10 transition-colors group">
                 <td className="p-4">
                   <div className="flex items-center gap-2">
@@ -85,21 +129,23 @@ export default function Offers() {
                   </div>
                 </td>
                 <td className="p-4 text-sm font-semibold text-white">
-                  {coupon.type === 'percentage' ? `${coupon.discount}%` : `$${coupon.discount}`}
+                  {coupon.type === 'percentage' ? `${coupon.discount}%` : `₹${coupon.discount}`}
                 </td>
-                <td className="p-4 text-sm text-text-secondary">${coupon.minOrder}</td>
-                <td className="p-4 text-sm text-text-secondary">${coupon.maxDiscount}</td>
-                <td className="p-4 text-sm text-text-secondary">{coupon.validUntil}</td>
-                <td className="p-4 text-sm font-semibold text-white">{coupon.usageCount}</td>
+                <td className="p-4 text-sm text-text-secondary">₹{coupon.minOrder || 0}</td>
+                <td className="p-4 text-sm text-text-secondary">₹{coupon.maxDiscount || 0}</td>
+                <td className="p-4 text-sm text-text-secondary">{coupon.validUntil || 'Lifetime'}</td>
+                <td className="p-4 text-sm font-semibold text-white">{coupon.usageCount || 0}</td>
                 <td className="p-4">
-                  <span className={`status-badge ${coupon.status === 'active' ? 'badge-delivered' : 'badge-cancelled'}`}>{coupon.status}</span>
+                  <span className={`status-badge ${coupon.status === 'active' ? 'badge-delivered' : 'badge-cancelled'}`}>{coupon.status || 'Active'}</span>
                 </td>
-                <td className="p-4">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => handleEdit(coupon)} className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-purple-400 hover:bg-purple-500/10 transition-colors"><Edit2 size={14} /></button>
-                    <button onClick={() => handleDelete(coupon.id)} className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"><Trash2 size={14} /></button>
-                  </div>
-                </td>
+                {user && (
+                  <td className="p-4">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEdit(coupon)} className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-purple-400 hover:bg-purple-500/10 transition-colors"><Edit2 size={14} /></button>
+                      <button onClick={() => handleDelete(coupon.id)} className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -107,7 +153,7 @@ export default function Offers() {
       </div>
 
       {/* Modal */}
-      {showForm && (
+      {user && showForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center fade-in" onClick={resetForm}>
           <div className="glass-card-solid p-8 w-full max-w-lg slide-up" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
@@ -151,8 +197,9 @@ export default function Offers() {
                 <input type="date" className="glass-input w-full text-sm"
                   value={form.validUntil} onChange={(e) => setForm(f => ({ ...f, validUntil: e.target.value }))} />
               </div>
-              <button onClick={handleSave} className="btn-primary w-full justify-center py-3 mt-2">
-                {editingId ? 'Update Coupon' : 'Create Coupon'}
+              <button onClick={handleSave} disabled={saving} className="btn-primary w-full justify-center py-3 mt-2 disabled:opacity-50">
+                {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                {saving ? 'Saving...' : editingId ? 'Update Coupon' : 'Create Coupon'}
               </button>
             </div>
           </div>

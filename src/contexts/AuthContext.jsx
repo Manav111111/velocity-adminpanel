@@ -1,33 +1,49 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { auth } from '../services/firebase';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from 'firebase/auth';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+// Hardcoded admin credentials
+const ADMIN_EMAIL = 'manavv@gmail.com';
+const ADMIN_PASSWORD = 'manavv';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Check localStorage on mount
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-    return unsub;
+    const stored = localStorage.getItem('velocity_admin');
+    if (stored) {
+      try {
+        setUser(JSON.parse(stored));
+      } catch {
+        localStorage.removeItem('velocity_admin');
+      }
+    }
+    setLoading(false);
   }, []);
 
-  const login = (email, password) => signInWithEmailAndPassword(auth, email, password);
-  const signup = (email, password) => createUserWithEmailAndPassword(auth, email, password);
-  const logout = () => signOut(auth);
+  const login = (email, password) => {
+    return new Promise((resolve, reject) => {
+      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+        const userData = { email: ADMIN_EMAIL, name: 'Manav', role: 'Admin' };
+        setUser(userData);
+        localStorage.setItem('velocity_admin', JSON.stringify(userData));
+        resolve(userData);
+      } else {
+        reject(new Error('Invalid email or password'));
+      }
+    });
+  };
 
-  const value = { user, loading, login, signup, logout };
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('velocity_admin');
+  };
+
+  const value = { user, loading, login, logout };
 
   return (
     <AuthContext.Provider value={value}>
