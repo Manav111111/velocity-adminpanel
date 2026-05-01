@@ -1,5 +1,5 @@
-const CLOUD_NAME = 'duccx9yst';
-const UPLOAD_PRESET = 'velocitypro_unsigned';
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 export const uploadToCloudinary = async (file) => {
   const formData = new FormData();

@@ -197,16 +197,16 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((card, i) => (
           <StatCard key={i} {...card} loading={statsLoading} />
         ))}
       </div>
 
       {/* Chart + Pending Summary Row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Revenue Over Last 7 Days */}
-        <div className="col-span-2 glass-card p-6">
+        <div className="lg:col-span-2 glass-card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-semibold text-white">Revenue (Last 7 Days)</h3>

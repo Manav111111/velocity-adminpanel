@@ -3,13 +3,13 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAMox6OzfkkgaXK3qd3ep7jc7Ov5djL1Do",
-  authDomain: "velocity-pro.firebaseapp.com",
-  projectId: "velocity-pro",
-  storageBucket: "velocity-pro.firebasestorage.app",
-  messagingSenderId: "845684833636",
-  appId: "1:845684833636:web:e5b7c50ae8b21e01f6ce71",
-  measurementId: "G-P9HZTKTQV3"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
