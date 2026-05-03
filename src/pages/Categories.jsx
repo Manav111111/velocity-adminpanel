@@ -156,7 +156,7 @@ export default function Categories() {
                 <div className="relative h-36 bg-dark-500 overflow-hidden">
                   {cat.imageUrl ? (
                     <img src={cat.imageUrl} alt={cat.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      className="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <ImagePlus size={40} className="text-text-muted opacity-30" />
@@ -205,7 +205,7 @@ export default function Categories() {
                   ${form.imageUrl ? 'border-accent-green/40' : 'hover:border-purple-500/30'} text-text-muted hover:text-text-primary`}>
                   {form.imageUrl ? (
                     <>
-                      <img src={form.imageUrl} alt="preview" className="w-full h-28 object-cover rounded-lg" />
+                      <img src={form.imageUrl} alt="preview" className="w-16 h-16 object-cover rounded-lg" />
                       <span className="text-xs text-accent-green mt-1">✓ Image Uploaded — Click to replace</span>
                     </>
                   ) : (

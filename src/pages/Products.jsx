@@ -208,7 +208,7 @@ export default function Products() {
         <div className="flex flex-wrap gap-2 mb-2">
           {(data.images||[]).map((url,i)=>(
             <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden group">
-              <img src={url} alt="" className="w-full h-full object-cover"/>
+              <img src={url} alt="" className="w-16 h-16 object-cover"/>
               <button onClick={()=>removeImg(i,isEdit)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><X size={14} className="text-white"/></button>
             </div>
           ))}

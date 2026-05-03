@@ -87,7 +87,7 @@ function BannerManagement({ user }) {
           {banners.map((b,i)=>(
             <div key={b.id} className="glass-card overflow-hidden group hover:border-purple-500/30 transition-all slide-up" style={{animationDelay:`${i*60}ms`}}>
               <div className="relative h-40 overflow-hidden bg-dark-500">
-                <img src={b.imageUrl} alt={b.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"/>
+                <img src={b.imageUrl} alt={b.title} className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-300"/>
                 <div className={`absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold backdrop-blur-sm ${b.isActive?'bg-accent-green/20 text-accent-green':'bg-dark-600/60 text-text-muted'}`}>
                   {b.isActive?<Eye size={10}/>:<EyeOff size={10}/>} {b.isActive?'Active':'Inactive'}
                 </div>
@@ -125,7 +125,7 @@ function BannerManagement({ user }) {
               <div>
                 <label className="text-xs text-text-secondary uppercase tracking-wider font-semibold mb-1.5 block">Banner Image</label>
                 <label className={`glass-input w-full flex flex-col items-center justify-center gap-2 cursor-pointer py-8 transition-colors ${form.imageUrl?'border-accent-green/40':'hover:border-purple-500/30'} text-text-muted hover:text-text-primary`}>
-                  {form.imageUrl ? (<><img src={form.imageUrl} alt="preview" className="w-full h-32 object-cover rounded-lg"/><span className="text-xs text-accent-green mt-1">✓ Uploaded — Click to replace</span></>) : (<><Upload size={24}/><span className="text-sm">{uploading?'Uploading...':'Upload Image'}</span><span className="text-xs opacity-60">1200 × 400px recommended</span></>)}
+                  {form.imageUrl ? (<><img src={form.imageUrl} alt="preview" className="w-16 h-16 object-cover rounded-lg"/><span className="text-xs text-accent-green mt-1">✓ Uploaded — Click to replace</span></>) : (<><Upload size={24}/><span className="text-sm">{uploading?'Uploading...':'Upload Image'}</span><span className="text-xs opacity-60">1200 × 400px recommended</span></>)}
                   <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading}/>
                 </label>
               </div>
